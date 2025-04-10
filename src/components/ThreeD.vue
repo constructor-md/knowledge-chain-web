@@ -34,7 +34,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 // 导入 Three.js 库的所有内容
 import * as THREE from 'three'
 // 导入 Three.js 的 DragControls 插件，用于实现小球的拖动交互
@@ -49,6 +49,7 @@ import EditModal from './EditModal.vue'
 import DeleteConfirmModal from './DeleteConfirmModal.vue'
 // 引入 Markdown 弹框组件
 import MarkdownModal from './MarkdownModal.vue'
+import {useAuthStore} from "@/stores/auth.js";
 
 /**
  * 父组件传入数据
@@ -85,6 +86,37 @@ const contextMenuY = ref(0)
 const selectedBallId = ref(null)
 // 创建响应式变量，用于存储选中小球的标题
 const selectedBallTitle = ref('')
+const authStore = useAuthStore();
+// 编辑权限
+const editAuth = ref(false)
+// 开启监听 通过对状态变量的监听实现响应式同步页面效果
+// 用于标记事件监听器是否已经添加
+const isContextMenuListenerAdded = ref(false);
+
+// 监听 authStatus 的变化
+watch(() => authStore.authStatus, (newStatus) => {
+  editAuth.value = newStatus;
+  if (editAuth.value) {
+    if (!isContextMenuListenerAdded.value) {
+      try {
+        // 有编辑权限才可以打开右键菜单
+        window.addEventListener('contextmenu', onMouseRightClick);
+        isContextMenuListenerAdded.value = true;
+      } catch (error) {
+        console.error('添加 contextmenu 事件监听器时出错:', error);
+      }
+    }
+  } else {
+    if (isContextMenuListenerAdded.value) {
+      try {
+        window.removeEventListener('contextmenu', onMouseRightClick);
+        isContextMenuListenerAdded.value = false;
+      } catch (error) {
+        console.error('移除 contextmenu 事件监听器时出错:', error);
+      }
+    }
+  }
+});
 
 // 清除场景内容 但场景仍旧是初始化的 清除后不用重复初始化
 function clearScene() {
@@ -389,50 +421,55 @@ function rebindDragControls() {
     controls.dispose();
   }
 
-  // 创建新的 DragControls
-  controls = new DragControls(allBalls, camera, renderer.domElement);
+  // 有编辑权限才可以拖动
+  if (editAuth.value) {
+    // 创建新的 DragControls
+    controls = new DragControls(allBalls, camera, renderer.domElement);
 
-  controls.addEventListener('dragstart', (event) => {
-    // 记录小球的初始位置
-    event.object.userData.initialPosition = event.object.position.clone();
-    // 禁用轨道控制器
-    orbitControls.enabled = false;
-  });
-
-  controls.addEventListener('drag', (event) => {
-    const ball = event.object;
-    const initialPosition = ball.userData.initialPosition;
-    // 计算当前位置和初始位置的偏移量
-    const delta = ball.position.clone().sub(initialPosition);
-    if (delta.length() > 0) { // 检查偏移量是否不为零
-      // 更新小球的位置
-      ball.position.copy(initialPosition).add(delta);
-      // 更新连接线条
-      updateConnections();
-      // 更新文本位置
-      updateAllTextPositions();
-      // 记录小球位置变化
-      recordBallPosition();
-      // 小球被拖动，就显示位置改变 寻求保存的按钮
-      positionChange.value = true;
-    }
-  });
-
-  controls.addEventListener('dragend', (event) => {
-    // 启用轨道控制器
-    orbitControls.enabled = true;
-    // 重新计算聚光灯位置和角度以覆盖所有小球
-    const center = new THREE.Vector3();
-    Array.from(balls.values()).forEach((ball) => {
-      center.add(ball.position);
+    controls.addEventListener('dragstart', (event) => {
+      // 记录小球的初始位置
+      event.object.userData.initialPosition = event.object.position.clone();
+      // 禁用轨道控制器
+      orbitControls.enabled = false;
     });
-    center.divideScalar(balls.size);
 
-    const spotLight = scene.getObjectByName('spotLight');
-    if (spotLight) {
-      spotLight.position.copy(center).add(new THREE.Vector3(0, 5, 0));
-    }
-  });
+    controls.addEventListener('drag', (event) => {
+      const ball = event.object;
+      const initialPosition = ball.userData.initialPosition;
+      // 计算当前位置和初始位置的偏移量
+      const delta = ball.position.clone().sub(initialPosition);
+      if (delta.length() > 0) { // 检查偏移量是否不为零
+        // 更新小球的位置
+        ball.position.copy(initialPosition).add(delta);
+        // 更新连接线条
+        updateConnections();
+        // 更新文本位置
+        updateAllTextPositions();
+        // 记录小球位置变化
+        recordBallPosition();
+        // 小球被拖动，就显示位置改变 寻求保存的按钮
+        positionChange.value = true;
+      }
+    });
+
+    controls.addEventListener('dragend', (event) => {
+      // 启用轨道控制器
+      orbitControls.enabled = true;
+      // 重新计算聚光灯位置和角度以覆盖所有小球
+      const center = new THREE.Vector3();
+      Array.from(balls.values()).forEach((ball) => {
+        center.add(ball.position);
+      });
+      center.divideScalar(balls.size);
+
+      const spotLight = scene.getObjectByName('spotLight');
+      if (spotLight) {
+        spotLight.position.copy(center).add(new THREE.Vector3(0, 5, 0));
+      }
+    });
+  }
+
+
 }
 
 //---------------------------------------3D元素鼠标交互-----------------------------------------------------------
@@ -466,11 +503,7 @@ function onMouseRightClick(event) {
     // 显示右键菜单
     showContextMenu.value = true
   }
-  console.log('selectedBallId.value', selectedBallId.value)
-  console.log('selectedBallTitle.value', selectedBallTitle.value)
 }
-
-window.addEventListener('contextmenu', onMouseRightClick)
 
 // 小球以外的位置点击关闭右键菜单
 const handleGlobalClick = (event) => {

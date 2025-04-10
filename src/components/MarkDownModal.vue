@@ -7,8 +7,8 @@
       <div class="modal-container">
         <!--    顶部标题    -->
         <div class="modal-header">
-          <button v-if="!isEditing" @click="startEditing" class="edit-button">编辑</button>
-          <button v-if="isEditing" @click="saveMarkdown" class="save-button">保存</button>
+          <button v-if="!isEditing && editAuth" @click="startEditing" class="edit-button">编辑</button>
+          <button v-if="isEditing && editAuth" @click="saveMarkdown" class="save-button">保存</button>
           <button @click="confirmClose" class="close-button">&times;</button>
         </div>
         <!--    展示状态内容    -->
@@ -60,11 +60,12 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits, computed, ref, onMounted, onUnmounted } from 'vue';
+import {defineProps, defineEmits, computed, ref, onMounted, onUnmounted, watch} from 'vue';
 import MarkdownIt from'markdown-it';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/default.css';
 import markdownItHighlightjs from'markdown-it-highlightjs';
+import {useAuthStore} from "@/stores/auth.js";
 
 const props = defineProps({
   // 这里接收知识点ID，用于查询知识内容
@@ -142,6 +143,13 @@ const isEditing = ref(false);
 const isClosing = ref(false);
 // markdown内容是否被编辑
 const isMarkdownEdited = ref(false);
+const authStore = useAuthStore();
+// 编辑权限
+const editAuth = ref(false)
+// 开启监听 通过对状态变量的监听实现响应式同步页面效果
+watch(() => authStore.authStatus, (newStatus) => {
+  editAuth.value = newStatus;
+});
 
 // 控制弹框大小随着页面大小变化
 const modalWidth = ref(0);
@@ -302,6 +310,11 @@ const submitAnswer = () => {
 .save-button:hover,
 .close-button:hover {
   background-color: rgba(0, 0, 0, 0.1);
+}
+
+.close-button {
+  // 编辑和保存不存在时，关闭按钮还在右边
+  margin-left: auto;
 }
 
 .modal-body {

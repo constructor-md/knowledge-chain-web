@@ -1,19 +1,30 @@
 import axios from 'axios';
+import {setNotLogin} from "@/stores/auth.js";
 
 // 创建 axios 实例
 const service = axios.create({
-  baseURL: '', // 这里可以设置你的 API 基础地址
+  baseURL: import.meta.env.VITE_API_BASE_URL,
   timeout: 5000 // 请求超时时间
 });
+
+const skipUrls = [
+  '/user/register',
+  '/user/login'
+];
 
 // 请求拦截器
 service.interceptors.request.use(
   config => {
-    // 假设 token 存放在 localStorage 中
+    // 跳过不需要token的请求
+    const shouldSkip = skipUrls.some(url => config.url.includes(url));
+    if (shouldSkip) {
+      return config; // 如果是要跳过的 URL，直接返回配置，不进行后续处理
+    }
     const token = localStorage.getItem('token');
     if (token) {
-      // 在请求头中携带 token
-      config.headers['Authorization'] = `Bearer ${token}`;
+      config.headers['token'] = token;
+    } else {
+      setNotLogin()
     }
     return config;
   },
@@ -27,13 +38,12 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   response => {
     const res = response.data;
-    // 这里可以根据后端返回的状态码进行处理
-    if (res.code!== 200) {
-      console.error('请求失败:', res.message);
-      return Promise.reject(new Error(res.message || 'Error'));
-    } else {
-      return res;
+    if (res.code === 600502) {
+      console.log("拦截到未登录")
+      // 未登录 跳转登录
+      setNotLogin()
     }
+    return res;
   },
   error => {
     console.error('请求出错:', error.message);

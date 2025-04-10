@@ -1,7 +1,7 @@
 <template>
   <div class="custom-dropdown-container" @click.stop>
     <!-- 无内容时仅显示加号按钮 -->
-    <div v-if="options.length === 0" class="add-button" @click="openCreateModal">
+    <div v-if="options.length === 0 && editAuth" class="add-button" @click="openCreateModal">
       <span class="plus-icon">+</span>
     </div>
     <!-- 有内容时显示下拉框和加号按钮 -->
@@ -23,7 +23,7 @@
           {{ option.label }}
         </div>
       </div>
-      <div class="add-button" @click="openCreateModal">
+      <div v-if="editAuth" class="add-button" @click="openCreateModal">
         <span class="plus-icon">+</span>
       </div>
     </div>
@@ -44,7 +44,8 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits, onMounted, onUnmounted } from 'vue';
+import {ref, defineProps, defineEmits, onMounted, onUnmounted, watch} from 'vue';
+import {useAuthStore} from "@/stores/auth.js";
 
 const props = defineProps({
   // 下拉框列表 [{label, value}]
@@ -64,6 +65,13 @@ const isDropdownOpen = ref(false);
 const isCreateModalOpen = ref(false);
 // 输入框知识库名称双向绑定值
 const newKnowledgeBaseName = ref('');
+const authStore = useAuthStore();
+// 编辑权限
+const editAuth = ref(false)
+// 开启监听 通过对状态变量的监听实现响应式同步页面效果
+watch(() => authStore.authStatus, (newStatus) => {
+  editAuth.value = newStatus;
+});
 
 // 下拉框展开状态置反
 const toggleDropdown = () => {
