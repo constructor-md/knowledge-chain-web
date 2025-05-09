@@ -34,7 +34,7 @@
 
 <script setup lang="ts">
 import {ref} from 'vue'
-import {register, login, updateAuth} from '../assets/js/api.js'
+import {apiRegister, apiLogin, apiUpdateAuth} from '../assets/js/api.js'
 import {setLogin} from "@/stores/auth.js";
 const data = ref({
   username: '',
@@ -62,7 +62,7 @@ const returnLogin = () => {
 
 const handleLogin = async () => {
   try {
-    const res = await login(data.value);
+    const res = await apiLogin(data.value);
     // 未注册
     if (res.code === 600506) {
       // 跳转注册框
@@ -79,10 +79,11 @@ const handleLogin = async () => {
       const token = res.data;
       // 存入本地缓存
       localStorage.setItem('token', token);
+      console.log("登陆成功")
       // 状态变量触发各个页面显示
       setLogin()
       // 获取权限信息
-      await updateAuth();
+      await apiUpdateAuth();
       // 清理报错
       clearError()
     }
@@ -98,7 +99,7 @@ const handleRegister = async () => {
 
 
   try {
-    let res = await register(data.value)
+    let res = await apiRegister(data.value)
     // 用户名重复
     if (res.code === 600506) {
       // 红字显示用户名重复

@@ -5,12 +5,14 @@ export const setLogin = () => {
   // 已登录 触发各个页面显示
   const authStore = useAuthStore();
   authStore.setLoginStatus(true)
+  console.log("设置已登录状态")
 }
 
 export const setNotLogin = () => {
   // 未登录 触发登录显示
   const authStore = useAuthStore();
   authStore.setLoginStatus(false)
+  console.log("设置未登录状态")
 }
 
 export const useAuthStore = defineStore('auth', () => {

@@ -34,7 +34,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import {onMounted, ref, watch, watchEffect} from 'vue'
 // 导入 Three.js 库的所有内容
 import * as THREE from 'three'
 // 导入 Three.js 的 DragControls 插件，用于实现小球的拖动交互
@@ -50,6 +50,11 @@ import DeleteConfirmModal from './DeleteConfirmModal.vue'
 // 引入 Markdown 弹框组件
 import MarkdownModal from './MarkdownModal.vue'
 import {useAuthStore} from "@/stores/auth.js";
+import {
+  apiAddKnowLedgePoint, apiDeleteKnowLedgePoint,
+  apiGetKnowLedgePointList,
+  apiUpdateKnowLedgePointTitle, apiUpdateLocation
+} from "@/assets/js/api.js";
 
 /**
  * 父组件传入数据
@@ -63,20 +68,23 @@ const props = defineProps({
 
 //-------------------------------------------全局数据管理-------------------------------------------------------
 // 从接口获取的小球数据，包含每个小球的 ID、标题、初始位置
-let ballData = new Map([
-  ['1111', { title: '小球1', x: 0, y: 0, z: 0 }],
-  ['2222', { title: '小球2', x: 1, y: 1, z: 1 }],
-  ['3333', { title: '小球3', x: -1, y: -1, z: -1 }],
-  ['4444', { title: '小球4', x: -3, y: -1, z: -1 }],
-])
+// let ballData = new Map([
+//   ['1111', { title: '小球1', x: 0, y: 0, z: 0 }],
+//   ['2222', { title: '小球2', x: 1, y: 1, z: 1 }],
+//   ['3333', { title: '小球3', x: -1, y: -2, z: -1 }],
+//   ['4444', { title: '小球4', x: -3, y: -1, z: -1 }],
+// ])
+let ballData = new Map([])
 // 从接口获取的连接数据，定义了哪些小球之间需要连接
-const connectionsData = ref([
-  ['1111', '2222'],
-  ['2222', '3333'],
-  ['4444', '2222'],
-])
+const connectionsData = ref([])
+// const connectionsData = ref([
+//    ['1111', '2222'],
+//    ['2222', '3333'],
+//    ['4444', '2222'],
+//  ])
 // 从接口获取的高亮连接数据，定义了哪些连接需要高亮显示
-const highlightedConnectionsData = ref([['1111', '2222']])
+// const highlightedConnectionsData = ref([['1111', '2222']])
+const highlightedConnectionsData = ref([])
 
 // 创建响应式变量，用于存储右键菜单的 x 坐标
 const contextMenuX = ref(0)
@@ -94,8 +102,8 @@ const editAuth = ref(false)
 const isContextMenuListenerAdded = ref(false);
 
 // 监听 authStatus 的变化
-watch(() => authStore.authStatus, (newStatus) => {
-  editAuth.value = newStatus;
+watchEffect(() => {
+  editAuth.value = authStore.authStatus;
   if (editAuth.value) {
     if (!isContextMenuListenerAdded.value) {
       try {
@@ -144,6 +152,7 @@ function recordBallPosition() {
   ballData.forEach((ballInfo, id) => {
     // 获取当前id对应的小球对象
     const ball = balls.get(id)
+    console.log("ball", ball)
     // 更新 ballData 中对应小球的位置
     ballInfo.x = ball.position.x
     ballInfo.y = ball.position.y
@@ -157,21 +166,30 @@ function recordBallPosition() {
 onMounted(() => {
   // 初始化场景
   initScene()
-  // 绘制元素
-  draw()
 })
 
 
 //---------------------------------------绘图相关方法-----------------------------------------------------------
 // kId变化时触发重绘
-const redraw = () => {
+const redraw = async () => {
+  console.log("触发重绘")
+  let res = await apiGetKnowLedgePointList(props.kId)
+  ballData = new Map(res.data.map(item => {
+    return [item.id, {
+      title: item.title,
+      x: item.x,
+      y: item.y,
+      z: item.z,
+    }]
+  }))
+  console.log("ballData", ballData)
   // 请求获取最新知识库数据
-  ballData = new Map([
-    ['1111', { title: 'newBall11', x: 0, y: 7, z: 0 }],
-    ['2222', { title: 'newBall22', x: 2, y: 1, z: 1 }],
-    ['3333', { title: 'newBall33', x: -1, y: -6, z: -1 }],
-    ['4444', { title: 'newBall44', x: -3, y: -4, z: -1 }],
-  ])
+  // ballData = new Map([
+  //   ['1111', { title: 'newBall11', x: 0, y: 7, z: 0 }],
+  //   ['2222', { title: 'newBall22', x: 2, y: 1, z: 1 }],
+  //   ['3333', { title: 'newBall33', x: -1, y: -6, z: -1 }],
+  //   ['4444', { title: 'newBall44', x: -3, y: -4, z: -1 }],
+  // ])
   // 清除现有的场景内容
   clearScene()
   // 根据新的 ballData 重新创建小球、连接线条和文本
@@ -329,6 +347,7 @@ function createBalls() {
   })
   // 遍历 ballData，为每个数据创建一个小球
   ballData.forEach((ballInfo, id) => {
+    console.log("创建小球", ballInfo, id)
     // 创建小球网格对象，将几何体和材质组合
     const ball = new THREE.Mesh(geometry, material)
     // 开启小球的阴影投射功能
@@ -381,6 +400,10 @@ function createBalls() {
 
 // 根据connections创建连接线条
 function createConnections() {
+  console.log("connectionsData.value", connectionsData.value)
+  if (connectionsData.value.length <= 1) {
+    return;
+  }
   // 遍历 connectionsData 数组，为每对小球创建连接线条
   connectionsData.value.forEach(([startId, endId]) => {
     // 获取起始小球
@@ -568,113 +591,134 @@ window.addEventListener('dblclick', onDoubleClick)
 const showEditModal = ref(false)
 
 // 保存
-function saveEdit(newTitle) {
-  console.log('selectedBallId.value', selectedBallId.value)
+async function saveEdit(newTitle) {
   // 编辑逻辑
   //    根据当前小球ID 获取ballData中小球对象，更新其中title
   //    获取小球元素，更新小球元素中的title
   //    获取对应的文本对象，更新文本对象的内容
   if (selectedBallId.value) {
-    // 查找选中小球在 ballData 数组中的索引
-    const ballInfo = ballData.get(selectedBallId.value)
-    // 更新 ballData 中对应小球的标题
-    ballInfo.title = newTitle
-    // 获取对应的小球对象
-    const ball = balls.get(selectedBallId.value)
-    // 更新小球的用户数据中的标题
-    ball.userData.title = newTitle
-    // 获取对应的文本精灵
-    const textSprite = texts.get(selectedBallId.value)
+    let data = {
+      id: selectedBallId.value,
+      title: newTitle
+    }
+    let res = await apiUpdateKnowLedgePointTitle(data)
+    if (res.code === 200 && res.data === true) {
+      // 查找选中小球在 ballData 数组中的索引
+      const ballInfo = ballData.get(selectedBallId.value)
+      // 更新 ballData 中对应小球的标题
+      ballInfo.title = newTitle
+      // 获取对应的小球对象
+      const ball = balls.get(selectedBallId.value)
+      // 更新小球的用户数据中的标题
+      ball.userData.title = newTitle
+      // 获取对应的文本精灵
+      const textSprite = texts.get(selectedBallId.value)
 
-    // 更新文本精灵的内容
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    const fontSize = 64
-    ctx.font = `bold ${fontSize}px Arial`
-    const textWidth = ctx.measureText(newTitle).width
-    // 适当增加 canvas 高度以避免文本截断
-    canvas.width = textWidth
-    canvas.height = fontSize * 1.2
-    ctx.font = `bold ${fontSize}px Arial`
-    ctx.fillStyle = '#ffffff'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(newTitle, 0, fontSize * 0.6)
-
-    textSprite.material.map = new THREE.CanvasTexture(canvas)
-    textSprite.material.needsUpdate = true
-
-    // 调整文本精灵的大小
-    textSprite.scale.set((0.05 * textWidth) / fontSize, 0.05 * 1.2, 1)
-
-    // 文本对齐
-    updateTextSymmetry(ball, textSprite)
-  } else {
-    // 新建逻辑：
-    //      创建新的小球对象 添加到ballData
-    //      在字体加载的成功回调中，创建单一小球元素和title文本元素
-    //      不定义链接关系
-
-    let newBallData = { title: newTitle, x: 0, y: 0, z: 0 }
-    // 将新的小球数据添加到 ballData 数组中
-    ballData.set('' + Date.now(), newBallData)
-    const loader = new FontLoader()
-    loader.load('/YouYuan_Regular.json', (font) => {
-      // 创建新小球的几何体
-      const geometry = new THREE.SphereGeometry(0.1, 128, 128)
-      // 创建新小球的材质
-      const material = new THREE.MeshStandardMaterial({
-        color: 0xf0f0f0,
-        roughness: 0.8,
-        metalness: 0.2,
-      })
-      // 创建新小球的网格对象
-      const ball = new THREE.Mesh(geometry, material)
-      ball.castShadow = true
-      ball.receiveShadow = true
-      // 设置新小球的位置
-      ball.position.set(newBallData.x, newBallData.y, newBallData.z)
-      // 为新小球添加用户数据
-      ball.userData = {
-        id: newBallData.id,
-        title: newBallData.title,
-        initialPosition: ball.position.clone(),
-      }
-      // 将新小球添加到场景中
-      scene.add(ball)
-      // 将新小球添加到 balls 数组中
-      balls.set(newBallData.id, ball)
-
-      // 创建文本精灵材质
+      // 更新文本精灵的内容
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')
       const fontSize = 64
       ctx.font = `bold ${fontSize}px Arial`
-      const textWidth = ctx.measureText(newBallData.title).width
+      const textWidth = ctx.measureText(newTitle).width
       // 适当增加 canvas 高度以避免文本截断
       canvas.width = textWidth
       canvas.height = fontSize * 1.2
       ctx.font = `bold ${fontSize}px Arial`
       ctx.fillStyle = '#ffffff'
       ctx.textBaseline = 'middle'
-      ctx.fillText(newBallData.title, 0, fontSize * 0.6)
+      ctx.fillText(newTitle, 0, fontSize * 0.6)
 
-      const texture = new THREE.CanvasTexture(canvas)
-      const spriteMaterial = new THREE.SpriteMaterial({ map: texture })
-      const sprite = new THREE.Sprite(spriteMaterial)
+      textSprite.material.map = new THREE.CanvasTexture(canvas)
+      textSprite.material.needsUpdate = true
 
       // 调整文本精灵的大小
-      sprite.scale.set((0.05 * textWidth) / fontSize, 0.05 * 1.2, 1)
-
-      // 将文本精灵添加到场景中
-      scene.add(sprite)
-      // 将文本精灵添加到 texts 数组中
-      texts.set(newBallData.id, sprite)
+      textSprite.scale.set((0.05 * textWidth) / fontSize, 0.05 * 1.2, 1)
 
       // 文本对齐
-      updateTextSymmetry(ball, sprite)
-      // 绑定拖动控制器
-      rebindDragControls()
-    })
+      updateTextSymmetry(ball, textSprite)
+    }
+  } else {
+    let data = {
+      kbId: props.kId,
+      title: newTitle
+    }
+    let res = await apiAddKnowLedgePoint(data)
+    let newBallData = {}
+    if (res.code === 200) {
+      newBallData = {
+        id: res.data.id,
+        title: res.data.title,
+        x: res.data.x,
+        y: res.data.y,
+        z: res.data.z
+      }
+      // 新建逻辑：
+      //      创建新的小球对象 添加到ballData
+      //      在字体加载的成功回调中，创建单一小球元素和title文本元素
+      //      不定义链接关系
+
+      // 将新的小球数据添加到 ballData 数组中
+      ballData.set(newBallData.id, newBallData)
+      const loader = new FontLoader()
+      loader.load('/YouYuan_Regular.json', (font) => {
+        // 创建新小球的几何体
+        const geometry = new THREE.SphereGeometry(0.1, 128, 128)
+        // 创建新小球的材质
+        const material = new THREE.MeshStandardMaterial({
+          color: 0xf0f0f0,
+          roughness: 0.8,
+          metalness: 0.2,
+        })
+        // 创建新小球的网格对象
+        const ball = new THREE.Mesh(geometry, material)
+        ball.castShadow = true
+        ball.receiveShadow = true
+        // 设置新小球的位置
+        ball.position.set(newBallData.x, newBallData.y, newBallData.z)
+        // 为新小球添加用户数据
+        ball.userData = {
+          id: newBallData.id,
+          title: newBallData.title,
+          initialPosition: ball.position.clone(),
+        }
+        // 将新小球添加到场景中
+        scene.add(ball)
+        // 将新小球添加到 balls 数组中
+        balls.set(newBallData.id, ball)
+
+        // 创建文本精灵材质
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        const fontSize = 64
+        ctx.font = `bold ${fontSize}px Arial`
+        const textWidth = ctx.measureText(newBallData.title).width
+        // 适当增加 canvas 高度以避免文本截断
+        canvas.width = textWidth
+        canvas.height = fontSize * 1.2
+        ctx.font = `bold ${fontSize}px Arial`
+        ctx.fillStyle = '#ffffff'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(newBallData.title, 0, fontSize * 0.6)
+
+        const texture = new THREE.CanvasTexture(canvas)
+        const spriteMaterial = new THREE.SpriteMaterial({ map: texture })
+        const sprite = new THREE.Sprite(spriteMaterial)
+
+        // 调整文本精灵的大小
+        sprite.scale.set((0.05 * textWidth) / fontSize, 0.05 * 1.2, 1)
+
+        // 将文本精灵添加到场景中
+        scene.add(sprite)
+        // 将文本精灵添加到 texts 数组中
+        texts.set(newBallData.id, sprite)
+
+        // 文本对齐
+        updateTextSymmetry(ball, sprite)
+        // 绑定拖动控制器
+        rebindDragControls()
+      })
+    }
+
   }
   // 隐藏编辑弹框
   showEditModal.value = false
@@ -700,40 +744,43 @@ function closeDeleteConfirmModal() {
 }
 
 // 确认删除
-function confirmDelete() {
-  // 获取选中的小球对象
-  const ball = balls.get(selectedBallId.value)
-  // 获取选中小球的 ID
-  const ballId = ball.userData.id
-  // 从场景中移除选中的小球
-  scene.remove(ball)
-  // 从 balls Map中移除选中的小球
-  balls.delete(ballId)
-  // 从 ballData 数组中移除选中的小球
-  ballData.delete(ballId)
+async function confirmDelete() {
+  let res = await apiDeleteKnowLedgePoint(selectedBallId.value)
+  if (res.code === 200) {
+    // 获取选中的小球对象
+    const ball = balls.get(selectedBallId.value)
+    // 获取选中小球的 ID
+    const ballId = ball.userData.id
+    // 从场景中移除选中的小球
+    scene.remove(ball)
+    // 从 balls Map中移除选中的小球
+    balls.delete(ballId)
+    // 从 ballData 数组中移除选中的小球
+    ballData.delete(ballId)
 
-  // 创建新的连接数组
-  const newConnections = []
-  connectionsData.value.forEach(([start, end]) => {
-    if (start !== ballId && end !== ballId) {
-      newConnections.push([start, end])
-    }
-  })
-  // 更新连接数组
-  connectionsData.value = newConnections
-  // 移除所有旧的连接线条
-  lines.forEach((line) => scene.remove(line))
-  lines.length = 0
-  // 重新创建所有连接线条
-  createConnections()
-  // 获取对应的文本精灵
-  const textSprite = texts.get(ballId)
-  // 从场景中移除文本精灵
-  scene.remove(textSprite)
-  // 从 texts 数组中移除文本精灵
-  texts.delete(ballId)
-  // 隐藏删除确认弹框
-  showDeleteConfirmModal.value = false
+    // 创建新的连接数组
+    const newConnections = []
+    connectionsData.value.forEach(([start, end]) => {
+      if (start !== ballId && end !== ballId) {
+        newConnections.push([start, end])
+      }
+    })
+    // 更新连接数组
+    connectionsData.value = newConnections
+    // 移除所有旧的连接线条
+    lines.forEach((line) => scene.remove(line))
+    lines.length = 0
+    // 重新创建所有连接线条
+    createConnections()
+    // 获取对应的文本精灵
+    const textSprite = texts.get(ballId)
+    // 从场景中移除文本精灵
+    scene.remove(textSprite)
+    // 从 texts 数组中移除文本精灵
+    texts.delete(ballId)
+    // 隐藏删除确认弹框
+    showDeleteConfirmModal.value = false
+  }
 }
 
 /**
@@ -752,7 +799,20 @@ function closeMarkdownModal() {
  */
 // 控制位置变化保存按钮的显示和隐藏
 const positionChange = ref(false)
-const saveData = () => {}
+const saveData = async () => {
+  let data = Array.from(ballData, ([key, value]) => ({
+    id: key,
+    kbId: props.kId,
+    title: value.title,
+    x: value.x,
+    y: value.y,
+    z: value.z
+  }));
+  let res = await apiUpdateLocation(data)
+  if (res.code === 200) {
+    positionChange.value = false
+  }
+}
 
 // ------------------------------------------动画效果-------------------------------------------------------
 // 控制动画循环是否执行

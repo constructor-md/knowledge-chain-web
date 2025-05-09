@@ -60,12 +60,22 @@
 </template>
 
 <script setup>
-import {defineProps, defineEmits, computed, ref, onMounted, onUnmounted, watch} from 'vue';
+import {
+  defineProps,
+  defineEmits,
+  computed,
+  ref,
+  onMounted,
+  onUnmounted,
+  watch,
+  watchEffect
+} from 'vue';
 import MarkdownIt from'markdown-it';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/default.css';
 import markdownItHighlightjs from'markdown-it-highlightjs';
 import {useAuthStore} from "@/stores/auth.js";
+import {apiGetKnowLedgePageInfo, apiUpdateMarkdown} from "@/assets/js/api.js";
 
 const props = defineProps({
   // 这里接收知识点ID，用于查询知识内容
@@ -79,49 +89,9 @@ const emits = defineEmits(['close']);
 const md = MarkdownIt().use(markdownItHighlightjs, {
   hljs
 });
-const rawMarkdown = ref("# 测试 Markdown 文本\n" +
-  "\n" +
-  "## 一、标题测试\n" +
-  "这是一个二级标题，用于测试标题的渲染效果。\n" +
-  "\n" +
-  "### 1.1 三级标题\n" +
-  "这是一个三级标题，进一步展示标题的层次结构。\n" +
-  "\n" +
-  "## 二、段落文本\n" +
-  "在 Markdown 中，段落是通过空行来分隔的。这里是一个段落文本，主要用于测试普通文本的显示效果。可以包含一些文字内容，比如介绍某个概念、描述一个过程等等。\n" +
-  "\n" +
-  "## 三、列表测试\n" +
-  "### 3.1 无序列表\n" +
-  "- 列表项 1：无序列表通常使用 `-` 符号来表示。\n" +
-  "- 列表项 2：每个列表项都独占一行。\n" +
-  "- 列表项 3：可以有多个列表项，用于列举相关的内容。\n" +
-  "\n" +
-  "### 3.2 有序列表\n" +
-  "1. 列表项 1：有序列表使用数字加 `.` 来表示。\n" +
-  "2. 列表项 2：数字会按照顺序自动排列。\n" +
-  "3. 列表项 3：常用于表示有顺序的步骤或项目。\n" +
-  "\n" +
-  "## 四、链接和图片\n" +
-  "### 4.1 链接\n" +
-  "[这是一个链接](https://www.example.com)，点击后应该能够跳转到指定的网页地址。在 Markdown 中，链接的格式是 `[链接文本](链接地址)`。\n" +
-  "\n" +
-  "### 4.2 图片\n" +
-  "![图片描述](https://www.example.com/image.jpg)：这是一个插入图片的示例，在 Markdown 中，图片的格式是 `![图片描述](图片地址)`。如果图片地址有效，应该能够正确显示图片。\n" +
-  "\n" +
-  "## 五、代码块测试\n" +
-  "### 5.1 行内代码\n" +
-  "在 Markdown 中，行内代码使用反引号（`）来表示，例如 `print(\"Hello, World!\")`，这样可以突出显示代码文本。\n" +
-  "\n" +
-  "### 5.2 代码块\n" +
-  "```python\n" +
-  "def add(a, b):\n" +
-  "    return a + b\n" +
-  "\n" +
-  "result = add(3, 5)\n" +
-  "print(result)\n" +
-  "```");
+const rawMarkdown = ref("");
 // 保存原始的 markdown 内容 用于比较是否已编辑
-const originalMarkdown = ref(rawMarkdown.value);
+const originalMarkdown = ref("");
 // 计算属性，将原始 Markdown 解析为 HTML
 const markdownContent = computed(() => md.render(rawMarkdown.value));
 
@@ -147,8 +117,8 @@ const authStore = useAuthStore();
 // 编辑权限
 const editAuth = ref(false)
 // 开启监听 通过对状态变量的监听实现响应式同步页面效果
-watch(() => authStore.authStatus, (newStatus) => {
-  editAuth.value = newStatus;
+watchEffect(() => {
+  editAuth.value = authStore.authStatus;
 });
 
 // 控制弹框大小随着页面大小变化
@@ -161,11 +131,17 @@ const updateModalSize = () => {
   modalHeight.value = height;
 };
 
-onMounted(() => {
-  // todo 根据知识点id查询展示内容
+const getKnowLedgePageInfo = async () => {
+  let res = await apiGetKnowLedgePageInfo(props.ballId)
+  if (res.code === 200) {
+    rawMarkdown.value = res.data.markdown
+    originalMarkdown.value = res.data.markdown
+    generatedQuestion.value = res.data.question
+  }
+}
 
-
-
+onMounted(async () => {
+  await getKnowLedgePageInfo()
   updateModalSize();
   window.addEventListener('resize', updateModalSize);
 });
@@ -180,12 +156,17 @@ const startEditing = () => {
 };
 
 // 点击保存按钮 保存内容并将编辑状态修正
-const saveMarkdown = () => {
-  // todo 保存编辑内容到后台
-
-  isEditing.value = false;
-  originalMarkdown.value = rawMarkdown.value; // 保存当前内容作为原始内容
-  isMarkdownEdited.value = false;
+const saveMarkdown = async () => {
+  let data = {
+    id: props.ballId,
+    markdown: rawMarkdown.value
+  }
+  let res = await apiUpdateMarkdown(data)
+  if (res.code === 200) {
+    isEditing.value = false;
+    originalMarkdown.value = rawMarkdown.value; // 保存当前内容作为原始内容
+    isMarkdownEdited.value = false;
+  }
 };
 
 // 点击关闭按钮
