@@ -9,29 +9,36 @@
         <div class="modal-header">
           <button v-if="!isEditing && editAuth" @click="startEditing" class="edit-button">编辑</button>
           <button v-if="isEditing && editAuth" @click="saveMarkdown" class="save-button">保存</button>
-          <button @click="confirmClose" class="close-button">&times;</button>
+          <div class="header-title" v-if="!editAuth" > {{title}} </div>
+          <div class="header-right">
+            <el-button v-if="!isEditing && editAuth" class="relation-button" @click="openRelationManagement" type="primary">关系管理</el-button>
+            <button @click="confirmClose" class="close-button">&times;</button>
+          </div>
         </div>
         <!--    展示状态内容    -->
         <div v-if="!isEditing" class="modal-body">
           <!--     markdown文本     -->
           <div v-html="markdownContent"></div>
           <!--     问题部分     -->
-          <h3 class="section-title">提问</h3> <!-- 添加提问标题 -->
+          <h3 class="section-title">
+            <p>问题</p>
+            <el-button type="primary" :loading="newQuestionLoading" v-if="editAuth" @click="handleNewQuestion">来个新问题</el-button>
+          </h3>
           <div class="question-box">
-            <p>{{ generatedQuestion }}</p>
+            {{ generatedQuestion }}
           </div>
           <!--    答案填写部分      -->
           <h3 class="section-title">填写答案</h3> <!-- 添加填写答案标题 -->
           <div class="answer-box">
-            <textarea v-model="userAnswer" placeholder="请输入你的答案" :readonly="isSubmitted"></textarea>
+            <textarea v-model="userAnswer" placeholder="请输入你的答案" ></textarea>
           </div>
-          <div v-if="!isSubmitted" class="submit-button-container">
+          <div class="submit-button-container">
             <button @click="submitAnswer" class="submit-button">提交答案</button>
           </div>
           <!--     答案评价部分     -->
           <div v-if="showEvaluation" class="evaluation-box">
             <h3 class="section-title">评价结果</h3> <!-- 添加评价结果标题 -->
-            <textarea v-model="evaluationReason" placeholder="请输入评价理由" readonly></textarea>
+            <div class="evaluation-content" v-html="evaluatedMarkdown"></div>
             <span class="score" :style="{ color:'red', fontSize: '64px', fontFamily: 'cursive' }">{{ evaluationScore }}</span>
           </div>
         </div>
@@ -56,6 +63,12 @@
         </div>
       </div>
     </div>
+    <!-- 关系管理弹框 -->
+    <RelationManagement
+      v-model="showRelationManagementModal"
+      :ballId="props.ballId"
+      @close="closeRelationManagement"
+    />
   </div>
 </template>
 
@@ -67,19 +80,28 @@ import {
   ref,
   onMounted,
   onUnmounted,
-  watch,
-  watchEffect
+  watchEffect, nextTick
 } from 'vue';
 import MarkdownIt from'markdown-it';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/default.css';
 import markdownItHighlightjs from'markdown-it-highlightjs';
 import {useAuthStore} from "@/stores/auth.js";
-import {apiGetKnowLedgePageInfo, apiUpdateMarkdown} from "@/assets/js/api.js";
+import {
+  apiGenerateANewQuestion,
+  apiGetKnowLedgePageInfo, apiGetScore,
+  apiSubmitAnswer,
+  apiUpdateMarkdown
+} from "@/api/api.js";
+import RelationManagement from "@/components/RelationManagement.vue";
 
 const props = defineProps({
   // 这里接收知识点ID，用于查询知识内容
   ballId: {
+    type: String,
+    default: ''
+  },
+  title: {
     type: String,
     default: ''
   }
@@ -96,17 +118,19 @@ const originalMarkdown = ref("");
 const markdownContent = computed(() => md.render(rawMarkdown.value));
 
 // 问题内容
-const generatedQuestion = ref('根据上述 Markdown 内容，请回答相关问题：代码块中函数 add 的作用是什么？'); // 模拟后台生成的问题
+const generatedQuestion = ref('');
 // 用户编辑答案
-const userAnswer = ref('函数 add 的作用是将输入的两个参数 a 和 b 相加，并返回相加的结果。'); // 模拟用户输入的答案
+const userAnswer = ref('');
 // 答案评价展示控制
-const showEvaluation = ref(false);
+const showEvaluation = computed(() => {
+  return evaluationReason.value !== null && evaluationReason.value.length > 0
+});
 // 答案评价内容
-const evaluationReason = ref('回答内容准确，逻辑清晰，很好地解释了函数的作用。'); // 模拟评价理由
+const evaluationReason = ref('');
+// 答案评价 markdown
+const evaluatedMarkdown = computed(() => md.render(evaluationReason.value));
 // 答案评价分数
-const evaluationScore = ref('85');
-// 答案提交按钮显示控制
-const isSubmitted = ref(false);
+const evaluationScore = ref('');
 // 弹框是否处于编辑状态
 const isEditing = ref(false);
 // 关闭确认弹窗弹出
@@ -136,7 +160,10 @@ const getKnowLedgePageInfo = async () => {
   if (res.code === 200) {
     rawMarkdown.value = res.data.markdown
     originalMarkdown.value = res.data.markdown
-    generatedQuestion.value = res.data.question
+    generatedQuestion.value = res.data.question === null ? '' : res.data.question
+    userAnswer.value = res.data.answer
+    evaluationReason.value = res.data.evaluation
+    evaluationScore.value = res.data.score
   }
 }
 
@@ -211,24 +238,116 @@ const close = () => {
   emits('close');
 };
 
+// 新问题按钮
+const newQuestionLoading = ref(false);
+const handleNewQuestion = async () => {
+  newQuestionLoading.value = true
+  let res = await apiGenerateANewQuestion(props.ballId)
+  if (res.code === 200) {
+    generatedQuestion.value = res.data
+  }
+  newQuestionLoading.value = false
+}
+
 // 提交答案按钮
-const submitAnswer = () => {
-  // todo 查询答案评价 AI流式输出
-
-
-
-
-  showEvaluation.value = true;
-  evaluationScore.value = '85';
-  isSubmitted.value = true; // 提交后设置为已提交状态
+const submitAnswer = async () => {
+  // 提交回答
+  let data = {
+    id: props.ballId,
+    answer: userAnswer.value
+  }
+  let res = await apiSubmitAnswer(data);
+  if (res.code === 200) {
+    // 重置结果区域
+    evaluationReason.value = '';
+    evaluationScore.value = null;
+    // 调用流式请求
+    await fetchEvaluationStream(props.ballId);
+    await getScore(props.ballId)
+  }
 };
+
+const getScore = async (id) => {
+  let res = await apiGetScore(id)
+  if (res.code === 200) {
+    evaluationScore.value = res.data
+  }
+}
+
+// 缓存结构数据
+const buffer = ref('')
+// 流式请求方法
+const fetchEvaluationStream = async (id) => {
+  const response = await fetch(import.meta.env.VITE_API_BASE_URL + "/qa/evaluation?id=" + id, {
+    headers: {
+      'token':  localStorage.getItem('token'),
+      'Accept': 'text/event-stream'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! Status: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      console.log('Stream completed');
+      break;
+    }
+
+    const chunk = decoder.decode(value, { stream: true });
+    console.log('Stream value', chunk);
+    // 无条件将文本拼接到buffer
+    buffer.value += chunk;
+
+    // 尝试通过正则找到所有 data:JSON(单层括号) 格式的数据
+    // 找到就解析否则就跳过
+    const regex = /data:(\{.*?\})/g;
+    let match;
+    while ((match = regex.exec(buffer.value)) !== null) {
+      const jsonText = match[1];
+      console.log('jsonText', jsonText);
+      try {
+        const jsonObject = JSON.parse(jsonText);
+        console.log('jsonObject', jsonObject);
+        evaluationReason.value += jsonObject.data;
+      } catch (error) {
+        console.error('JSON解析错误:', error);
+      }
+    }
+
+    // 移除解析过的数据
+    let lastMatchEnd = 0;
+    regex.lastIndex = 0;
+    while ((match = regex.exec(buffer.value)) !== null) {
+      lastMatchEnd = regex.lastIndex;
+    }
+    buffer.value = buffer.value.slice(lastMatchEnd);
+  }
+
+};
+
+const showRelationManagementModal = ref(false);
+
+const openRelationManagement = () => {
+  showRelationManagementModal.value = true;
+};
+
+const closeRelationManagement = () => {
+  showRelationManagementModal.value = false;
+};
+
 </script>
 
 <style lang="scss" scoped>
 // 弹框蒙版
 .modal-mask {
   position: fixed;
-  z-index: 9998;
+  z-index: 6666;
   top: 0;
   left: 0;
   width: 100%;
@@ -274,6 +393,18 @@ const submitAnswer = () => {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.header-right {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-left: auto;
+}
+
+.header-title {
+  font-size: 24px;
+  padding: 5px 10px;
+}
+
 .edit-button,
 .save-button,
 .close-button {
@@ -296,6 +427,11 @@ const submitAnswer = () => {
 .close-button {
   // 编辑和保存不存在时，关闭按钮还在右边
   margin-left: auto;
+}
+
+.el-button {
+  margin-left: auto;
+  margin-right: 20px;
 }
 
 .modal-body {
@@ -363,9 +499,10 @@ const submitAnswer = () => {
 
 .question-box {
   margin-top: 10px;
-  border: 1px solid #ccc;
+  white-space: pre-wrap;
+  width: 100%;
   padding: 10px;
-  border-radius: 4px;
+  font-size: 18px;
 }
 
 .answer-box {
@@ -380,6 +517,7 @@ const submitAnswer = () => {
   resize: vertical;
   overflow-y: auto;
   white-space: pre-wrap;
+  font-size: 18px;
 }
 
 .submit-button-container {
@@ -404,8 +542,24 @@ const submitAnswer = () => {
 
 .evaluation-box {
   margin-top: 10px;
+  margin-bottom: 20px;
   border-radius: 4px;
   position: relative;
+
+  .evaluation-content {
+    font-family: inherit;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 10px;
+    // 保持markdown样式
+    h1, h2, h3, h4 { margin: 10px 0; }
+    p { margin: 5px 0; }
+    pre {
+      background: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+    }
+  }
 }
 
 .evaluation-box textarea {
@@ -430,7 +584,11 @@ const submitAnswer = () => {
 }
 
 .section-title {
-  margin: 20px 0 10px;
+  width: 100%;
+  height: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-size: 18px;
   font-weight: bold;
 }

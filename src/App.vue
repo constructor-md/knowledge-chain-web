@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
-import {apiUpdateAuth} from "@/assets/js/api.js";
+import {apiUpdateAuth} from "@/api/api.js";
 import {useAuthStore} from "@/stores/auth";
 
 // 初始化存储

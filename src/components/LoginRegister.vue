@@ -34,7 +34,7 @@
 
 <script setup lang="ts">
 import {ref} from 'vue'
-import {apiRegister, apiLogin, apiUpdateAuth} from '../assets/js/api.js'
+import {apiRegister, apiLogin, apiUpdateAuth} from '../api/api.js'
 import {setLogin} from "@/stores/auth.js";
 const data = ref({
   username: '',

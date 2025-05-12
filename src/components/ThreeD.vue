@@ -2,7 +2,7 @@
   <!-- 用于渲染 Three.js 场景的容器，通过 ref 属性关联到 JavaScript 中的 canvasContainer 变量 -->
   <div ref="canvasContainer" class="canvas-container"></div>
   <!-- 保存按钮，位于右上角，设置为透明背景和白色文字 -->
-  <button v-if="positionChange" @click="saveData" class="save-button">保存修改</button>
+  <button v-if="positionChange" @click="saveLocation" class="save-button">保存修改</button>
   <!-- 右键菜单，showContextMenu 的值决定是否显示，通过样式绑定动态设置位置 -->
   <div
     v-if="showContextMenu"
@@ -14,7 +14,11 @@
     <button @click="handleContextMenuAction('delete')">删除</button>
   </div>
 
-  <MarkdownModal v-if="showMarkdownModal" :ballId="selectedBallId" @close="closeMarkdownModal" />
+  <MarkdownModal
+    v-if="showMarkdownModal"
+    :ballId="selectedBallId"
+    :title="selectedBallTitle"
+    @close="closeMarkdownModal" />
 
   <EditModal
     v-if="showEditModal"
@@ -51,10 +55,10 @@ import DeleteConfirmModal from './DeleteConfirmModal.vue'
 import MarkdownModal from './MarkdownModal.vue'
 import {useAuthStore} from "@/stores/auth.js";
 import {
-  apiAddKnowLedgePoint, apiDeleteKnowLedgePoint,
+  apiAddKnowLedgePoint, apiDeleteKnowLedgePoint, apiGetKnowledgeBaseAllRelation,
   apiGetKnowLedgePointList,
   apiUpdateKnowLedgePointTitle, apiUpdateLocation
-} from "@/assets/js/api.js";
+} from "@/api/api.js";
 
 /**
  * 父组件传入数据
@@ -68,20 +72,9 @@ const props = defineProps({
 
 //-------------------------------------------全局数据管理-------------------------------------------------------
 // 从接口获取的小球数据，包含每个小球的 ID、标题、初始位置
-// let ballData = new Map([
-//   ['1111', { title: '小球1', x: 0, y: 0, z: 0 }],
-//   ['2222', { title: '小球2', x: 1, y: 1, z: 1 }],
-//   ['3333', { title: '小球3', x: -1, y: -2, z: -1 }],
-//   ['4444', { title: '小球4', x: -3, y: -1, z: -1 }],
-// ])
 let ballData = new Map([])
 // 从接口获取的连接数据，定义了哪些小球之间需要连接
 const connectionsData = ref([])
-// const connectionsData = ref([
-//    ['1111', '2222'],
-//    ['2222', '3333'],
-//    ['4444', '2222'],
-//  ])
 // 从接口获取的高亮连接数据，定义了哪些连接需要高亮显示
 // const highlightedConnectionsData = ref([['1111', '2222']])
 const highlightedConnectionsData = ref([])
@@ -174,22 +167,21 @@ onMounted(() => {
 const redraw = async () => {
   console.log("触发重绘")
   let res = await apiGetKnowLedgePointList(props.kId)
-  ballData = new Map(res.data.map(item => {
-    return [item.id, {
-      title: item.title,
-      x: item.x,
-      y: item.y,
-      z: item.z,
-    }]
-  }))
-  console.log("ballData", ballData)
-  // 请求获取最新知识库数据
-  // ballData = new Map([
-  //   ['1111', { title: 'newBall11', x: 0, y: 7, z: 0 }],
-  //   ['2222', { title: 'newBall22', x: 2, y: 1, z: 1 }],
-  //   ['3333', { title: 'newBall33', x: -1, y: -6, z: -1 }],
-  //   ['4444', { title: 'newBall44', x: -3, y: -4, z: -1 }],
-  // ])
+  if (res.code === 200) {
+    ballData = new Map(res.data.map(item => {
+      return [item.id, {
+        title: item.title,
+        x: item.x,
+        y: item.y,
+        z: item.z,
+      }]
+    }))
+  }
+
+  let connectionRes = await apiGetKnowledgeBaseAllRelation(props.kId)
+  if (connectionRes.code === 200) {
+    connectionsData.value = connectionRes.data;
+  }
   // 清除现有的场景内容
   clearScene()
   // 根据新的 ballData 重新创建小球、连接线条和文本
@@ -400,8 +392,7 @@ function createBalls() {
 
 // 根据connections创建连接线条
 function createConnections() {
-  console.log("connectionsData.value", connectionsData.value)
-  if (connectionsData.value.length <= 1) {
+  if (connectionsData.value.length <= 0) {
     return;
   }
   // 遍历 connectionsData 数组，为每对小球创建连接线条
@@ -432,8 +423,24 @@ function createConnections() {
   })
 }
 
-// 重新绑定 DragControls
-// 有新的小球需要加入控制，就要重新绑定所有小球拖动
+function clearConnections() {
+  // 从场景中移除所有连接线条
+  lines.forEach((line) => scene.remove(line));
+  // 清空线条数组
+  lines.length = 0;
+}
+
+// 重绘线条的方法
+async function redrawConnections() {
+  let connectionRes = await apiGetKnowledgeBaseAllRelation(props.kId)
+  if (connectionRes.code === 200) {
+    connectionsData.value = connectionRes.data;
+    clearConnections();
+    createConnections();
+  }
+
+}
+
 // 重新绑定 DragControls
 // 有新的小球需要加入控制，就要重新绑定所有小球拖动
 function rebindDragControls() {
@@ -543,6 +550,8 @@ window.addEventListener('click', handleGlobalClick)
 
 // 右键菜单选项点击函数
 function handleContextMenuAction(action) {
+  // 先保存位置
+  saveLocation()
   // 隐藏右键菜单
   showContextMenu.value = false
   if (action === 'add') {
@@ -563,7 +572,6 @@ function handleContextMenuAction(action) {
 
 // 小球上双击鼠标打开Markdown弹框
 function onDoubleClick(event) {
-  console.log('鼠标双击')
   // 计算鼠标在标准化设备坐标中的位置
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1
@@ -576,8 +584,11 @@ function onDoubleClick(event) {
     const selectedBall = intersects[0].object
     // 更新选中小球id，会单向传入组件中
     selectedBallId.value = selectedBall.userData.id
+    selectedBallTitle.value = selectedBall.userData.title
     // 显示 Markdown 弹框
     showMarkdownModal.value = true
+    // 保存位置
+    saveLocation()
   }
 }
 
@@ -792,6 +803,8 @@ const showMarkdownModal = ref(false)
 // Markdown关闭事件函数
 function closeMarkdownModal() {
   showMarkdownModal.value = false
+  // 线条重绘
+  redrawConnections()
 }
 
 /**
@@ -799,7 +812,7 @@ function closeMarkdownModal() {
  */
 // 控制位置变化保存按钮的显示和隐藏
 const positionChange = ref(false)
-const saveData = async () => {
+const saveLocation = async () => {
   let data = Array.from(ballData, ([key, value]) => ({
     id: key,
     kbId: props.kId,
@@ -938,7 +951,7 @@ window.addEventListener('resize', () => {
   // 隐藏溢出内容
   overflow: hidden;
   // 设置容器为相对定位
-  position: relative;
+  position: fixed;
   // 设置容器的层级为 0
   z-index: 0;
 }

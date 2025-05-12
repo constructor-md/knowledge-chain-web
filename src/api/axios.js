@@ -1,10 +1,10 @@
 import axios from 'axios';
-import {setNotLogin} from "@/stores/auth.js";
+import {setNotLogin} from "@/stores/auth.ts";
 
 // 创建 axios 实例
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 5000 // 请求超时时间
+  timeout: 100000 // 请求超时时间
 });
 
 const skipUrls = [

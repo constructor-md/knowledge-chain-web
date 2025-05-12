@@ -6,14 +6,12 @@
     <LoginRegister v-if="notLogin" />
     <template v-else>
       <div class="dropdown-with-add">
-        <!-- 新增下拉框 -->
         <CustomDropDown
           :options="dropdownOptions"
           :selectedValue="selectedValue"
           @optionChanged="handleOptionChanged"
           v-if="dropdownOptions.length > 0"
         />
-        <!-- 无内容时仅显示加号按钮 -->
         <div v-if="editAuth" class="add-button" @click="openCreateModal">
           <span class="plus-icon">+</span>
         </div>
@@ -21,7 +19,6 @@
       <!-- 3D模块 -->
       <ThreeD :kId="selectedValue" />
     </template>
-    <!-- 新建知识库模态框 -->
     <div v-if="isCreateModalOpen" class="modal">
       <div class="modal-content">
         <h2>知识库新建</h2>
@@ -43,7 +40,7 @@ import LoginRegister from '../components/LoginRegister.vue'
 import CustomDropDown from "@/components/CustomDropDown.vue";
 import {ref, onMounted, watchEffect} from 'vue'
 import {setLogin, useAuthStore} from "@/stores/auth";
-import {apiAddKnowLedgeBase, apiGetKnowLedgeBaseList} from '../assets/js/api.js'
+import {apiAddKnowLedgeBase, apiGetKnowLedgeBaseList} from '../api/api.js'
 
 // 下拉框选中值 kId
 const selectedValue = ref('');

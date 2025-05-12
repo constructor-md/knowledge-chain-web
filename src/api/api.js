@@ -1,5 +1,5 @@
 import service from './axios.js';
-import {useAuthStore} from "@/stores/auth.js";
+import {useAuthStore} from "@/stores/auth.ts";
 
 // 注册
 export const apiRegister = (data) => {
@@ -139,6 +139,83 @@ export const apiUpdateMarkdown = (data) => {
       throw error;
     })
 }
+
+// 查询关联知识点列表
+export const apiSearchRelationKnowledgePoint = (id, keywords) => {
+  return service.get('/point/relation/list?id=' + id + '&keywords=' + keywords)
+    .then((res) => {
+      return res
+    })
+    .catch((error) => {
+      throw error;
+    })
+}
+
+// 建立连接
+export const apiAddKnowledgePointRelation = (sourceId, targetId) => {
+  return service.post('/relation/info?sourceId=' + sourceId + '&targetId=' + targetId)
+    .then((res) => {
+      return res
+    })
+    .catch((error) => {
+      throw error;
+    })
+}
+
+// 删除链接
+export const apiDeleteKnowledgePointRelation = (sourceId, targetId) => {
+  return service.delete('/relation/info?sourceId=' + sourceId + '&targetId=' + targetId)
+    .then((res) => {
+      return res
+    })
+    .catch((error) => {
+      throw error;
+    })
+}
+
+// 查询指定知识库下的所有连接
+export const apiGetKnowledgeBaseAllRelation = (id) => {
+  return service.get('/relation/all?id=' + id)
+    .then((res) => {
+      return res
+    })
+    .catch((error) => {
+      throw error;
+    })
+}
+
+// 生成新问题
+export const apiGenerateANewQuestion = (id) => {
+  return service.put('/page/question?id=' + id)
+    .then((res) => {
+      return res
+    })
+    .catch((error) => {
+      throw error;
+    })
+}
+
+// 提交答案
+export const apiSubmitAnswer = (data) => {
+  return service.post('/qa/answer', data)
+    .then((res) => {
+      return res
+    })
+    .catch((error) => {
+      throw error;
+    })
+};
+
+// 获取评价分数
+export const apiGetScore = (id) => {
+  return service.get('/qa/score?id=' + id)
+    .then((res) => {
+      return res
+    })
+    .catch((error) => {
+      throw error;
+    })
+};
 
 
 
