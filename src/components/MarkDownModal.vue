@@ -291,7 +291,7 @@ const fetchEvaluationStream = async (id) => {
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-
+  const container = document.getElementById('evaluation-container');
   while (true) {
     const { done, value } = await reader.read();
     if (done) {
@@ -310,11 +310,13 @@ const fetchEvaluationStream = async (id) => {
     let match;
     while ((match = regex.exec(buffer.value)) !== null) {
       const jsonText = match[1];
-      console.log('jsonText', jsonText);
       try {
         const jsonObject = JSON.parse(jsonText);
-        console.log('jsonObject', jsonObject);
         evaluationReason.value += jsonObject.data;
+        if (container) {
+          // 平滑滚动到容器底部
+          container.scrollTop = container.scrollHeight;
+        }
       } catch (error) {
         console.error('JSON解析错误:', error);
       }
